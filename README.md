@@ -27,7 +27,7 @@ This repository documents a SOC analyst engagement carried out as part of the Be
 | Capture window | 5 June 2026, approx 10 hours (08:00 to 15:47, UTC+02:00) |
 | Evidence | web_access.log, auth.log, attack.pcap |
 | Phases | Phase 1 forensic analysis, Phase 2 Suricata detection |
-| Related incident | INC-2026-004 (SQL injection, same host) |
+| Related incident | [INC-2026-004](https://github.com/Jhatchi/NexaCorp-DFIR-INC-2026-004) (SQL injection, same host) |
 
 ---
 
@@ -119,7 +119,7 @@ The two response-side rules (1000004, 1000005) use the `file_data` buffer to cat
 - [INC-2026-001](https://github.com/Jhatchi/NexaCorp-DFIR-INC-2026-001): Linux infrastructure compromise (vsftpd backdoor, Caldera C2)
 - [INC-2026-002](https://github.com/Jhatchi/NexaCorp-DFIR-INC-2026-002): privilege escalation and persistence (Tor SSH, SUID, backdoor account)
 - [INC-2026-003](https://github.com/Jhatchi/NexaCorp-DFIR-INC-2026-003): month-1 cross-incident assessment
-- INC-2026-004: SQL injection (same host bru-web-01)
+- [INC-2026-004](https://github.com/Jhatchi/NexaCorp-DFIR-INC-2026-004): SQL injection (same host bru-web-01)
 - **INC-2026-005**: this repository
 
 ---
