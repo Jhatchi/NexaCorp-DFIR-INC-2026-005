@@ -6,12 +6,15 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
 jobs:
   typography:
     name: Typography validation (no em-dash, no en-dash)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Fail on em-dash (U+2014) or en-dash (U+2013) in tracked text
         run: |
@@ -30,10 +33,54 @@ jobs:
     name: Markdown lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Run markdownlint-cli
-        uses: nosborn/github-action-markdown-cli@v3.3.0
+        uses: nosborn/github-action-markdown-cli@9b5e871c11cc0649c5ac2526af22e23525fa344d # v3.3.0
         with:
           files: .
           config_file: .markdownlint.json
+
+  detection-rules:
+    name: Detection rule validation (conditional)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Detect detection artifacts
+        id: detect
+        run: |
+          if ls detection/*.rules >/dev/null 2>&1; then
+            echo "has_rules=true" >> "$GITHUB_OUTPUT"
+            echo "Found Suricata rule files."
+          else
+            echo "has_rules=false" >> "$GITHUB_OUTPUT"
+            echo "No .rules files, Suricata validation will be skipped."
+          fi
+          if ls detection/*.xml >/dev/null 2>&1; then
+            echo "has_xml=true" >> "$GITHUB_OUTPUT"
+            echo "Found XML rule files."
+          else
+            echo "has_xml=false" >> "$GITHUB_OUTPUT"
+            echo "No .xml files, xmllint validation will be skipped."
+          fi
+
+      - name: Validate Suricata rules (suricata -T)
+        if: steps.detect.outputs.has_rules == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends suricata
+          for f in detection/*.rules; do
+            echo "::group::suricata -T on $f"
+            sudo suricata -T -S "$f" -l /tmp
+            echo "::endgroup::"
+          done
+          echo "Suricata rule validation passed."
+
+      - name: Validate XML rules (xmllint)
+        if: steps.detect.outputs.has_xml == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libxml2-utils
+          xmllint --noout detection/*.xml
+          echo "XML well-formedness validation passed."
