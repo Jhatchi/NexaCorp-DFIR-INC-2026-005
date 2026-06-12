@@ -1,0 +1,39 @@
+name: ci
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  typography:
+    name: Typography validation (no em-dash, no en-dash)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Fail on em-dash (U+2014) or en-dash (U+2013) in tracked text
+        run: |
+          echo "Scanning all tracked files for forbidden dashes..."
+          if grep -rPn "[\x{2013}\x{2014}]" \
+              --exclude-dir=.git \
+              --exclude-dir=node_modules \
+              --binary-files=without-match \
+              . ; then
+            echo "::error::Found em-dash (U+2014) or en-dash (U+2013). Replace with colon, comma, parentheses, hyphen, or period."
+            exit 1
+          fi
+          echo "Typography OK: no em-dash or en-dash found."
+
+  markdownlint:
+    name: Markdown lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run markdownlint-cli
+        uses: nosborn/github-action-markdown-cli@v3.3.0
+        with:
+          files: .
+          config_file: .markdownlint.json

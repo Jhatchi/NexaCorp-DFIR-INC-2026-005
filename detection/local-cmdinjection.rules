@@ -1,0 +1,73 @@
+#
+# INC-2026-005 : NexaCorp Engagement
+# Suricata Detection Rules : Phase 2 (FINAL)
+#
+# Analyst:    Johan-Emmanuel Hatchi (blue11)
+# Created:    2026-06-12
+# File:       /etc/suricata/rules/learner/lab.rules
+# Target:     OS command injection + web shell on bru-web-01 (DVWA portal)
+#
+# SID range:  1000001 - 1000005 (analyst-local, no conflict with vendor SIDs)
+#
+# Validation: offline mode, deterministic TCP reassembly
+#   sudo suricata -c /etc/suricata/suricata.yaml -r attack.pcap -l ~/suri-offline \
+#     -S /etc/suricata/rules/learner/lab.rules --runmode single
+#   grep -oE '\[1:[0-9]+:[0-9]+\]' ~/suri-offline/fast.log | sort | uniq -c
+#
+# Offline counts (deterministic): 1000001=1, 1000002=2, 1000003=1, 1000004=6, 1000005=1
+#
+# Note on live replay: on the lab interface (MTU 1450, tcpreplay topspeed), large
+# multi-segment server responses are not reliably reassembled, producing unstable
+# counts between runs. Offline mode is the reliable reference for a forensic report.
+#
+# =============================================================================
+# RULE 1000001 : System-file targeting in command injection body
+# =============================================================================
+# Detects an injected command referencing a system configuration path. The
+# directory name "etc" appears in every standard system config path and is the
+# minimal token that identifies a /etc/ target inside the URL-encoded POST body.
+# Buffer: http.request_body (raw, request side).
+#
+alert http any any -> any any (msg:"LAB05 sensitive file targeting in command injection body"; flow:established,to_server; http.request_body; content:"etc"; nocase; sid:1000001; rev:4;)
+
+# =============================================================================
+# RULE 1000002 : Web shell usage
+# =============================================================================
+# Detects use of the deployed web shell: a GET request whose URI carries both
+# the shell filename and the cmd parameter. Fires on usage, not deployment.
+# Buffer: http.uri (normalised).
+#
+alert http any any -> any any (msg:"LAB05 web shell usage cmd param"; flow:established,to_server; http.uri; content:"shell.php"; nocase; content:"cmd="; nocase; sid:1000002; rev:1;)
+
+# =============================================================================
+# RULE 1000003 : Web shell write via command injection
+# =============================================================================
+# Detects the deployment event: the POST whose body injects PHP code by writing
+# shell.php to disk. Proactive, catches the backdoor before it is used.
+# Buffer: http.request_body (raw, request side).
+#
+alert http any any -> any any (msg:"LAB05 web shell write via command injection"; flow:established,to_server; http.request_body; content:"shell.php"; nocase; sid:1000003; rev:1;)
+
+# =============================================================================
+# RULE 1000004 : RCE confirmed (response side)
+# =============================================================================
+# Response-side detection: fires when the server response confirms command
+# execution as the web server process (the www-data identity string). Proves
+# successful exploitation, not a mere attempt.
+# Buffer: file_data (response body).
+#
+alert http any any -> any any (msg:"LAB05 RCE confirmed www-data in response"; flow:established,to_client; file_data; content:"www-data"; sid:1000004; rev:7;)
+
+# =============================================================================
+# RULE 1000005 : /etc/passwd exfiltration (response side)
+# =============================================================================
+# Response-side detection: fires when the server response contains the root line
+# of /etc/passwd, proving a system accounts file leaked into a web response.
+# Near-zero false positive: this string has no legitimate place in a web response.
+# Buffer: file_data (response body).
+#
+alert http any any -> any any (msg:"LAB05 data exfil etc-passwd content in response"; flow:established,to_client; file_data; content:"root:x:0:0"; sid:1000005; rev:6;)
+
+#
+# End of INC-2026-005 detection ruleset.
+#
