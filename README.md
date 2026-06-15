@@ -1,4 +1,6 @@
-# NexaCorp DFIR: INC-2026-005
+# NexaCorp DFIR: INC-2026-005 - OS Command Injection and Web Shell
+
+OS command injection, web shell deployment, and SSH pivot on a web application portal. Blue Team forensic investigation and Suricata detection engineering.
 
 [![ci](https://github.com/Jhatchi/NexaCorp-DFIR-INC-2026-005/actions/workflows/ci.yml/badge.svg)](https://github.com/Jhatchi/NexaCorp-DFIR-INC-2026-005/actions/workflows/ci.yml)
 [![Methodology](https://img.shields.io/badge/methodology-NIST%20SP%20800--61r2-blue.svg)](#standards-and-frameworks)
@@ -7,8 +9,6 @@
 [![CWE](https://img.shields.io/badge/CWE--78-OS%20Command%20Injection-orange.svg)](https://cwe.mitre.org/data/definitions/78.html)
 [![License](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Johan--Emmanuel%20Hatchi-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/johan-emmanuel-hatchi/)
-
-OS command injection, web shell deployment, and SSH pivot on a web application portal. Blue Team forensic investigation and Suricata detection engineering.
 
 This repository documents a SOC analyst engagement carried out as part of the BeCode Cybersecurity Bootcamp (promotion 2025-2026). It reconstructs a full intrusion from network and log evidence, then delivers a validated set of network detection rules. It is the fifth incident in the NexaCorp DFIR series.
 
@@ -71,7 +71,7 @@ It is also the second documented incident on the same host as INC-2026-004 (SQL 
 
 ---
 
-## Repository structure
+## Repository layout
 
 ```
 NexaCorp-DFIR-INC-2026-005/
