@@ -1,8 +1,8 @@
-# INC-2026-005: OS Command Injection & Web Shell Pivot on NexaCorp Employee Portal
+# INC-2026-005 Findings Report: OS Command Injection and Web Shell
 
-**Incident reference:** INC-2026-005
-**Client:** NexaCorp Industries
-**Affected system:** `bru-web-01` (employee self-service portal)
+**Engagement:** NexaCorp DFIR, OS Command Injection and Web Shell (web shell deployment, SSH pivot)
+**Reference:** BCC-2026 / INC-2026-005
+**Target system:** bru-web-01, NexaCorp employee self-service portal
 **Reported by:** Marc Wauters, IT Infrastructure Manager
 **Date reported:** Monday June 8, 2026
 **Analyst:** Johan-Emmanuel Hatchi, SOC Analyst L1, BeCode Corp
