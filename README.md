@@ -16,7 +16,7 @@ This repository documents a SOC analyst engagement carried out as part of the Be
 
 ---
 
-## Incident at a glance
+## At a glance
 
 | Field | Value |
 |---|---|
@@ -29,6 +29,17 @@ This repository documents a SOC analyst engagement carried out as part of the Be
 | Evidence | web_access.log, auth.log, attack.pcap |
 | Phases | Phase 1 forensic analysis, Phase 2 Suricata detection |
 | Related incident | [INC-2026-004](https://github.com/Jhatchi/NexaCorp-DFIR-INC-2026-004) (SQL injection, same host) |
+
+| Investigation output | Value |
+|---|---|
+| Attacker requests | 18 (lowest volume of its subnet, the opposite of noisy scanners) |
+| Command injection POSTs | 7 |
+| Failed LFI attempts | 4 (plus 1 baseline) |
+| Web shell invocations | 2 |
+| Successful SSH logins (pivot) | 3 |
+| Suricata detection rules authored | 5 (SID 1000001 to 1000005) |
+| Rules firing against the capture | 5 of 5 |
+| MITRE ATT&CK techniques mapped | 9 across 5 tactics |
 
 ---
 
@@ -45,21 +56,6 @@ The attacker moved in deliberate stages over roughly four hours, each building o
 7. **SSH pivot**: three successful SSH logins as j.martin from the attacker IP (15:47), escalating from web-process execution to an interactive foothold.
 
 A parallel set of five Local File Inclusion attempts against the file viewer all failed, each returning an identical 3868-byte default error page. The real data leak came through command injection, not LFI. This distinction is established with response-body evidence in the report.
-
----
-
-## Key metrics
-
-| Metric | Value |
-|---|---|
-| Attacker requests | 18 (lowest volume of its subnet, the opposite of noisy scanners) |
-| Command injection POSTs | 7 |
-| Failed LFI attempts | 4 (plus 1 baseline) |
-| Web shell invocations | 2 |
-| Successful SSH logins (pivot) | 3 |
-| Suricata detection rules authored | 5 (SID 1000001 to 1000005) |
-| Rules firing against the capture | 5 of 5 |
-| MITRE ATT&CK techniques mapped | 9 across 5 tactics |
 
 ---
 
@@ -99,7 +95,7 @@ NexaCorp-DFIR-INC-2026-005/
 
 ---
 
-## Detection engineering highlight
+## Detection engineering
 
 Five rules, one per stage of the kill chain, each targeting the Suricata buffer suited to its intent:
 
