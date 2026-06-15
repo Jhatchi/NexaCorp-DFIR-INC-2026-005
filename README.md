@@ -4,6 +4,7 @@
 [![Methodology](https://img.shields.io/badge/methodology-NIST%20SP%20800--61r2-blue.svg)](#standards-and-frameworks)
 [![Framework](https://img.shields.io/badge/framework-MITRE%20ATT%26CK-red.svg)](https://attack.mitre.org/)
 [![Detection](https://img.shields.io/badge/Suricata-5%20rules%20validated-green.svg)](detection/local-cmdinjection.rules)
+[![CWE](https://img.shields.io/badge/CWE--78-OS%20Command%20Injection-orange.svg)](https://cwe.mitre.org/data/definitions/78.html)
 [![License](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Johan--Emmanuel%20Hatchi-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/johan-emmanuel-hatchi/)
 
