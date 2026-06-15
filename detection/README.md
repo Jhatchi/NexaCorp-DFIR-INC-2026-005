@@ -51,7 +51,7 @@ alert http any any -> any any (msg:"LAB05 data exfil etc-passwd content in respo
 ## Proof (offline replay)
 
 ```
-=== PAR SID ===
+=== BY SID ===
       1 [1:1000001:4]
       2 [1:1000002:1]
       1 [1:1000003:1]
