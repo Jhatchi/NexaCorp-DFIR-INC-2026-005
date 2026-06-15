@@ -25,7 +25,7 @@ This repository documents a SOC analyst engagement carried out as part of the Be
 | Attacker | 172.16.50.10 (external, curl/8.14.1) |
 | Root cause | OS command injection (CWE-78) on an unsanitised diagnostic input |
 | Outcome | RCE as www-data, /etc/passwd exfiltration, web shell persistence, SSH pivot |
-| Capture window | 5 June 2026, approx 10 hours (08:00 to 15:47, UTC+02:00) |
+| Capture window | 5 June 2026, approx 8 hours (08:00 to 15:47, UTC+02:00) |
 | Evidence | web_access.log, auth.log, attack.pcap |
 | Phases | Phase 1 forensic analysis, Phase 2 Suricata detection |
 | Related incident | [INC-2026-004](https://github.com/Jhatchi/NexaCorp-DFIR-INC-2026-004) (SQL injection, same host) |
