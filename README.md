@@ -121,6 +121,7 @@ The two response-side rules (1000004, 1000005) use the `file_data` buffer to cat
 - [INC-2026-003](https://github.com/Jhatchi/NexaCorp-DFIR-INC-2026-003): month-1 cross-incident assessment
 - [INC-2026-004](https://github.com/Jhatchi/NexaCorp-DFIR-INC-2026-004): SQL injection (same host bru-web-01)
 - **INC-2026-005**: this repository
+- [INC-2026-006](https://github.com/Jhatchi/NexaCorp-DFIR-INC-2026-006): stored XSS and session hijacking (web portal)
 
 ---
 
