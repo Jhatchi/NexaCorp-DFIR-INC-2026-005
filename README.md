@@ -1,6 +1,6 @@
 # NexaCorp DFIR: INC-2026-005 - OS Command Injection and Web Shell
 
-OS command injection, web shell deployment, and SSH pivot on a web application portal. Blue Team forensic investigation and Suricata detection engineering.
+OS command injection, web shell deployment, and SSH pivot on the NexaCorp employee self-service portal (`bru-web-01`). Blue Team forensic investigation and Suricata detection engineering. Conducted as a solo engagement during the BeCode Brussels Blue & Red Team bootcamp (Mission 05), as the continuation of [INC-2026-001](https://github.com/Jhatchi/NexaCorp-DFIR-INC-2026-001), [INC-2026-002](https://github.com/Jhatchi/NexaCorp-DFIR-INC-2026-002), [INC-2026-003](https://github.com/Jhatchi/NexaCorp-DFIR-INC-2026-003), and [INC-2026-004](https://github.com/Jhatchi/NexaCorp-DFIR-INC-2026-004).
 
 [![ci](https://github.com/Jhatchi/NexaCorp-DFIR-INC-2026-005/actions/workflows/ci.yml/badge.svg)](https://github.com/Jhatchi/NexaCorp-DFIR-INC-2026-005/actions/workflows/ci.yml)
 [![Methodology](https://img.shields.io/badge/methodology-NIST%20SP%20800--61r2-blue.svg)](#methodology)
