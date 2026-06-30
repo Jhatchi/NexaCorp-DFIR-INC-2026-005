@@ -217,6 +217,7 @@ Offline mode (`-r`) is the deterministic reference. Live replay with `tcpreplay`
 - **INC-2026-005**: this repository
 - [INC-2026-006](https://github.com/Jhatchi/NexaCorp-DFIR-INC-2026-006): stored XSS and session hijacking (web portal)
 - [INC-2026-007](https://github.com/Jhatchi/NexaCorp-DFIR-INC-2026-007): IDOR and broken access control (NexaPortal); Month 2 capstone
+- [INC-2026-008](https://github.com/Jhatchi/NexaCorp-DFIR-INC-2026-008): AD reconnaissance and Kerberoasting (first incident of Month 3)
 
 ---
 
